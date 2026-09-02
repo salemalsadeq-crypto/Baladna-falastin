@@ -41,7 +41,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   Future<void> _submit() async {
     if (_titleCtrl.text.trim().isEmpty || _selectedCategory == null || _selectedRegion == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fill in the name, category and governorate at least')),
+        const SnackBar(content: Text('عبي الاسم والقسم والمحافظة على الاقل')),
       );
       return;
     }
@@ -56,13 +56,13 @@ class _AddListingScreenState extends State<AddListingScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Submitted successfully, we will review it soon')),
+          const SnackBar(content: Text('تم الارسال بنجاح راح نراجعه ونفعله قريبا')),
         );
         Navigator.pop(context);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('صار خطأ: $e')),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -72,21 +72,21 @@ class _AddListingScreenState extends State<AddListingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add your listing')),
+      appBar: AppBar(title: const Text('اضف نشاطك')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(18),
               children: [
-                const Text('Listing name', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                const Text('اسم النشاط', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _titleCtrl,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'e.g. Abu Yassin Restaurant'),
+                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'مثال مطعم ابو ياسين'),
                 ),
                 const SizedBox(height: 18),
 
-                const Text('Category', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                const Text('القسم', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<Map<String, dynamic>>(
                   decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -98,7 +98,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                const Text('Governorate', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                const Text('المحافظة', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<Map<String, dynamic>>(
                   decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -110,7 +110,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                const Text('Phone / WhatsApp number', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                const Text('رقم الهاتف او الواتساب', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _phoneCtrl,
@@ -119,12 +119,12 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                const Text('Short description', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                const Text('وصف مختصر', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _descCtrl,
                   maxLines: 4,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Write a short description...'),
+                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'اكتب وصفا بسيطا'),
                 ),
                 const SizedBox(height: 26),
 
@@ -142,7 +142,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                             width: 20, height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
-                        : const Text('Submit for review', style: TextStyle(fontWeight: FontWeight.bold)),
+                        : const Text('ارسال للمراجعة', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
