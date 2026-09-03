@@ -50,4 +50,23 @@ class SupabaseService {
       'status': 'pending',
     });
   }
+
+  // ==== ادارة العناصر قيد المراجعة ====
+
+  Future<List<Map<String, dynamic>>> getPendingListings() async {
+    final response = await _client
+        .from('listings')
+        .select('*, categories(name_ar, icon), regions(name_ar)')
+        .eq('status', 'pending')
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> approveListing(String id) async {
+    await _client.from('listings').update({'status': 'approved'}).eq('id', id);
+  }
+
+  Future<void> rejectListing(String id) async {
+    await _client.from('listings').update({'status': 'rejected'}).eq('id', id);
+  }
 }

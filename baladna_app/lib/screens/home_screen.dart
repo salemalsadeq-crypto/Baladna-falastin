@@ -3,6 +3,7 @@ import '../services/supabase_service.dart';
 import '../theme.dart';
 import 'category_screen.dart';
 import 'add_listing_screen.dart';
+import 'admin_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +21,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _selectedRegion;
   bool _loading = true;
   String? _error;
+
+  int _titleTapCount = 0;
 
   @override
   void initState() {
@@ -55,10 +58,26 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _nearby = nearby);
   }
 
+  void _onTitleTap() {
+    _titleTapCount++;
+    if (_titleTapCount >= 7) {
+      _titleTapCount = 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminScreen()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('بلدنا فلسطين 🇵🇸')),
+      appBar: AppBar(
+        title: GestureDetector(
+          onTap: _onTitleTap,
+          child: const Text('بلدنا فلسطين 🇵🇸'),
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.clay,
         icon: const Icon(Icons.add),
@@ -84,7 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      // اختيار المحافظة
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                         decoration: BoxDecoration(
