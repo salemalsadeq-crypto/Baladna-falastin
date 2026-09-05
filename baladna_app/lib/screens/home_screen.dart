@@ -4,6 +4,10 @@ import '../theme.dart';
 import 'category_screen.dart';
 import 'add_listing_screen.dart';
 import 'admin_screen.dart';
+import 'search_screen.dart';
+
+// غيّر هذا الرمز لأي رقم سري تحبه، هو مفتاح الدخول للوحة الإدارة
+const String _adminPin = '5522';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,8 +26,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   String? _error;
 
-  int _titleTapCount = 0;
-
   @override
   void initState() {
     super.initState();
@@ -31,6 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadInitial() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final regions = await _service.getGovernorates();
       final categories = await _service.getCategories();
@@ -43,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'صار خطأ بجلب البيانات: $e';
+        _error = e.toString();
         _loading = false;
       });
     }
@@ -51,32 +57,75 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _onRegionSelected(Map<String, dynamic>? region) async {
     setState(() => _selectedRegion = region);
-    final nearby = await _service.getListings(
-      regionId: region?['id'],
-      limit: 10,
-    );
-    setState(() => _nearby = nearby);
+    try {
+      final nearby = await _service.getListings(regionId: region?['id'], limit: 10);
+      setState(() => _nearby = nearby);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
-  void _onTitleTap() {
-    _titleTapCount++;
-    if (_titleTapCount >= 7) {
-      _titleTapCount = 0;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminScreen()),
-      );
-    }
+  void _openAdminLogin() {
+    final pinController = TextEditingController();
+    String? errorText;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('دخول الإدارة'),
+              content: TextField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'أدخل الرمز السري',
+                  errorText: errorText,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (pinController.text == _adminPin) {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AdminScreen()),
+                      );
+                    } else {
+                      setDialogState(() => errorText = 'رمز غير صحيح');
+                    }
+                  },
+                  child: const Text('دخول'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: _onTitleTap,
-          child: const Text('بلدنا فلسطين 🇵🇸'),
-        ),
+        title: const Text('بلدنا فلسطين 🇵🇸'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            tooltip: 'دخول الإدارة',
+            onPressed: _openAdminLogin,
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.clay,
@@ -95,7 +144,21 @@ class _HomeScreenState extends State<HomeScreen> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Text(_error!, textAlign: TextAlign.center),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off, size: 40, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(_error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _loadInitial,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('إعادة المحاولة'),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.oliveDeep, foregroundColor: Colors.white),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : RefreshIndicator(
@@ -103,6 +166,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SearchScreen()),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.sand),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.search, color: Colors.grey),
+                              SizedBox(width: 8),
+                              Text('ابحث عن محل، خدمة، إعلان...', style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                         decoration: BoxDecoration(
@@ -135,8 +223,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisCount: 4,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 12,
+                        mainAxisSpacing: 14,
                         crossAxisSpacing: 8,
+                        childAspectRatio: 0.85,
                         children: _categories.map((cat) {
                           return InkWell(
                             borderRadius: BorderRadius.circular(16),
