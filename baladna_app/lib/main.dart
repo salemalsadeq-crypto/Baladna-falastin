@@ -1,13 +1,19 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
+import 'dns_fallback.dart';
 
 const supabaseUrl = 'https://sezepvlfxllmirshgmmm.supabase.co';
 const supabaseAnonKey = 'sb_publishable_tfZzE2jzJx2o1GSFtz0v1Q_3nIKeXit';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // يفعّل الحل البديل لمشاكل تحليل أسماء النطاقات على بعض الأجهزة
+  HttpOverrides.global = DnsFallbackHttpOverrides();
+
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   runApp(const BaladnaApp());
 }
