@@ -37,7 +37,7 @@ class DnsFallbackHttpOverrides extends HttpOverrides {
 
       final socket = await Socket.connect(address, uri.port,
           timeout: const Duration(seconds: 8));
-      return ConnectionTask.fromSocket(socket, () => socket.destroy());
+      return ConnectionTask.fromSocket(Future.value(socket), () => socket.destroy());
     };
     return client;
   }
