@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// استثناء ودّي يعرض رسالة عربية مفهومة بدل رسائل الأخطاء التقنية
 class AppException implements Exception {
   final String message;
   AppException(this.message);
@@ -101,6 +100,7 @@ class SupabaseService {
     String? phone,
     String? whatsapp,
     String? addressText,
+    String? price,
   }) {
     return _run(() async {
       await _client.from('listings').insert({
@@ -113,6 +113,7 @@ class SupabaseService {
         'address_text': addressText,
         'owner_id': currentUser?.id,
         'status': 'pending',
+        if (price != null && price.trim().isNotEmpty) 'custom_fields': {'price': price.trim()},
       }).timeout(const Duration(seconds: 12));
     });
   }
@@ -143,11 +144,36 @@ class SupabaseService {
 
   Future<void> incrementViews(String listingId, int currentViews) async {
     try {
-      await _client
-          .from('listings')
-          .update({'views_count': currentViews + 1})
-          .eq('id', listingId);
+      await _client.from('listings').update({'views_count': currentViews + 1}).eq('id', listingId);
     } catch (_) {}
+  }
+
+  // ==== أنشطتي الخاصة ====
+
+  Future<List<Map<String, dynamic>>> getMyListings() {
+    return _run(() async {
+      final uid = currentUser?.id;
+      if (uid == null) return <Map<String, dynamic>>[];
+      final response = await _client
+          .from('listings')
+          .select('*, categories(name_ar, icon), regions(name_ar)')
+          .eq('owner_id', uid)
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 12));
+      return List<Map<String, dynamic>>.from(response);
+    });
+  }
+
+  Future<void> updateListing(String id, Map<String, dynamic> fields) {
+    return _run(() async {
+      await _client.from('listings').update(fields).eq('id', id);
+    });
+  }
+
+  Future<void> deleteListing(String id) {
+    return _run(() async {
+      await _client.from('listings').delete().eq('id', id);
+    });
   }
 
   // ==== إدارة العناصر قيد المراجعة ====
@@ -186,10 +212,7 @@ class SupabaseService {
     return _run(() async {
       final res = await _client.auth.signUp(email: email, password: password);
       if (res.user != null) {
-        await _client.from('profiles').upsert({
-          'id': res.user!.id,
-          'full_name': fullName,
-        });
+        await _client.from('profiles').upsert({'id': res.user!.id, 'full_name': fullName});
       }
     });
   }
@@ -247,6 +270,36 @@ class SupabaseService {
           .where((r) => r['listings'] != null)
           .map((r) => Map<String, dynamic>.from(r['listings']))
           .toList();
+    });
+  }
+
+  // ==== التقييمات ====
+
+  Future<List<Map<String, dynamic>>> getRatings(String listingId) {
+    return _run(() async {
+      final response = await _client
+          .from('ratings')
+          .select()
+          .eq('listing_id', listingId)
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 12));
+      return List<Map<String, dynamic>>.from(response);
+    });
+  }
+
+  Future<void> addOrUpdateRating(String listingId, int rating, String? comment) {
+    return _run(() async {
+      final uid = currentUser?.id;
+      if (uid == null) throw AppException('سجّل دخولك أولاً لإضافة تقييم');
+      await _client.from('ratings').upsert(
+        {
+          'listing_id': listingId,
+          'user_id': uid,
+          'rating': rating,
+          'comment': comment,
+        },
+        onConflict: 'listing_id,user_id',
+      );
     });
   }
 }
