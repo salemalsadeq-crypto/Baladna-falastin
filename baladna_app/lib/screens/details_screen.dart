@@ -18,6 +18,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   final _service = SupabaseService();
   List<Map<String, dynamic>> _images = [];
   List<Map<String, dynamic>> _hours = [];
+  List<Map<String, dynamic>> _ratings = [];
   bool _loadingExtras = true;
   bool _isFavorite = false;
 
@@ -44,9 +45,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       await _service.toggleFavorite(widget.listing['id'], _isFavorite);
       setState(() => _isFavorite = !_isFavorite);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -54,10 +53,12 @@ class _DetailsScreenState extends State<DetailsScreen> {
     try {
       final images = await _service.getListingImages(widget.listing['id']);
       final hours = await _service.getListingHours(widget.listing['id']);
+      final ratings = await _service.getRatings(widget.listing['id']);
       if (mounted) {
         setState(() {
           _images = images;
           _hours = hours;
+          _ratings = ratings;
           _loadingExtras = false;
         });
       }
@@ -90,12 +91,72 @@ class _DetailsScreenState extends State<DetailsScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _openRatingDialog() async {
+    if (_service.currentUser == null) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+      if (_service.currentUser == null) return;
+    }
+    int selected = 5;
+    final commentCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('أضف تقييمك'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final starIndex = i + 1;
+                    return IconButton(
+                      onPressed: () => setDialogState(() => selected = starIndex),
+                      icon: Icon(
+                        starIndex <= selected ? Icons.star : Icons.star_border,
+                        color: AppColors.gold,
+                      ),
+                    );
+                  }),
+                ),
+                TextField(
+                  controller: commentCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(hintText: 'اكتب تعليقك (اختياري)'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('إرسال')),
+            ],
+          );
+        });
+      },
+    );
+    if (result == true) {
+      try {
+        await _service.addOrUpdateRating(widget.listing['id'], selected, commentCtrl.text.trim());
+        _loadExtras();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final listing = widget.listing;
     final phone = listing['phone'] as String?;
     final whatsapp = (listing['whatsapp'] as String?) ?? phone;
     final views = (listing['views_count'] as int?) ?? 0;
+    final customFields = listing['custom_fields'];
+    final price = (customFields is Map) ? customFields['price'] : null;
+
+    final avgRating = _ratings.isEmpty
+        ? 0.0
+        : _ratings.map((r) => (r['rating'] as num).toDouble()).reduce((a, b) => a + b) / _ratings.length;
 
     return Scaffold(
       backgroundColor: AppColors.sandLight,
@@ -113,11 +174,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: _images.isNotEmpty
-                  ? PageView(
-                      children: _images
-                          .map((img) => Image.network(img['image_url'], fit: BoxFit.cover))
-                          .toList(),
-                    )
+                  ? PageView(children: _images.map((img) => Image.network(img['image_url'], fit: BoxFit.cover)).toList())
                   : const DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -139,10 +196,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Text(
-                          listing['title'] ?? '',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
+                        child: Text(listing['title'] ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                       ),
                       Row(
                         children: [
@@ -153,27 +207,42 @@ class _DetailsScreenState extends State<DetailsScreen> {
                       ),
                     ],
                   ),
-                  if (listing['is_verified'] == true)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.gold,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text('✓ موثّق', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    ),
+                  Row(
+                    children: [
+                      if (listing['is_verified'] == true)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8, left: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(20)),
+                          child: const Text('✓ موثّق', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                      if (_ratings.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.sand)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star, size: 14, color: AppColors.gold),
+                              const SizedBox(width: 3),
+                              Text('${avgRating.toStringAsFixed(1)} (${_ratings.length})', style: const TextStyle(fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (price != null) ...[
+                    const SizedBox(height: 10),
+                    Text('$price', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.clay)),
+                  ],
                   const SizedBox(height: 18),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () => _call(phone),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.ok,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.ok, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                           icon: const Icon(Icons.call, size: 18),
                           label: const Text('اتصال'),
                         ),
@@ -182,11 +251,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () => _whatsapp(whatsapp),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.ink,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.ink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                           icon: const Icon(Icons.chat, size: 18),
                           label: const Text('واتساب'),
                         ),
@@ -216,18 +281,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     ..._hours.map((h) {
                       final day = _dayNames[h['day_of_week'] as int];
                       final closed = h['is_closed'] == true;
-                      final open = h['open_time'];
-                      final close = h['close_time'];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(day, style: const TextStyle(fontSize: 13)),
-                            Text(
-                              closed ? 'مغلق' : '${open ?? ''} - ${close ?? ''}',
-                              style: const TextStyle(fontSize: 13),
-                            ),
+                            Text(closed ? 'مغلق' : '${h['open_time'] ?? ''} - ${h['close_time'] ?? ''}', style: const TextStyle(fontSize: 13)),
                           ],
                         ),
                       );
@@ -238,7 +298,51 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     const Text('عن النشاط', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 4),
                     Text(listing['description'], style: const TextStyle(fontSize: 14, height: 1.6)),
+                    const SizedBox(height: 20),
                   ],
+
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('التقييمات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                      TextButton.icon(
+                        onPressed: _openRatingDialog,
+                        icon: const Icon(Icons.star_border, size: 18),
+                        label: const Text('أضف تقييمك'),
+                      ),
+                    ],
+                  ),
+                  if (_ratings.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text('لا يوجد تقييمات بعد، كن أول من يقيّم', style: TextStyle(color: Colors.grey)),
+                    )
+                  else
+                    ..._ratings.map((r) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: List.generate(5, (i) => Icon(
+                                    i < (r['rating'] as int) ? Icons.star : Icons.star_border,
+                                    size: 16,
+                                    color: AppColors.gold,
+                                  )),
+                            ),
+                            if (r['comment'] != null && r['comment'].toString().isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(r['comment'], style: const TextStyle(fontSize: 13)),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),

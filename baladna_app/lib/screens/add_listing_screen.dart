@@ -14,6 +14,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
 
   List<Map<String, dynamic>> _categories = [];
   List<Map<String, dynamic>> _regions = [];
@@ -53,6 +54,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
         regionId: _selectedRegion!['id'],
         description: _descCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
+        price: _priceCtrl.text.trim(),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,6 +118,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '05XXXXXXXX'),
+                ),
+                const SizedBox(height: 18),
+
+                const Text('السعر (اختياري)', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _priceCtrl,
+                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'مثال 150 شيكل او حسب الاتفاق'),
                 ),
                 const SizedBox(height: 18),
 

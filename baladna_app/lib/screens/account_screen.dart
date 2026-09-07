@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import 'favorites_screen.dart';
+import 'my_listings_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -39,6 +40,17 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          ListTile(
+            tileColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            leading: const Icon(Icons.storefront_outlined, color: AppColors.oliveDeep),
+            title: const Text('أنشطتي'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const MyListingsScreen()));
+            },
+          ),
+          const SizedBox(height: 10),
           ListTile(
             tileColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
