@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import 'auth_screen.dart';
 
 const _dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -18,13 +19,35 @@ class _DetailsScreenState extends State<DetailsScreen> {
   List<Map<String, dynamic>> _images = [];
   List<Map<String, dynamic>> _hours = [];
   bool _loadingExtras = true;
+  bool _isFavorite = false;
 
   @override
   void initState() {
     super.initState();
     _loadExtras();
+    _loadFavoriteStatus();
     final views = (widget.listing['views_count'] as int?) ?? 0;
     _service.incrementViews(widget.listing['id'], views);
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    final fav = await _service.isFavorite(widget.listing['id']);
+    if (mounted) setState(() => _isFavorite = fav);
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_service.currentUser == null) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+      if (_service.currentUser == null) return;
+    }
+    try {
+      await _service.toggleFavorite(widget.listing['id'], _isFavorite);
+      setState(() => _isFavorite = !_isFavorite);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
   Future<void> _loadExtras() async {
@@ -81,6 +104,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
           SliverAppBar(
             expandedHeight: 200,
             backgroundColor: AppColors.oliveDeep,
+            actions: [
+              IconButton(
+                icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: _isFavorite ? AppColors.clay : Colors.white),
+                onPressed: _toggleFavorite,
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: _images.isNotEmpty
                   ? PageView(

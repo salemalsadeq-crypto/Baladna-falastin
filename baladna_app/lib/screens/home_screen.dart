@@ -5,6 +5,8 @@ import 'category_screen.dart';
 import 'add_listing_screen.dart';
 import 'admin_screen.dart';
 import 'search_screen.dart';
+import 'auth_screen.dart';
+import 'account_screen.dart';
 
 // غيّر هذا الرمز لأي رقم سري تحبه، هو مفتاح الدخول للوحة الإدارة
 const String _adminPin = '5522';
@@ -114,12 +116,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openAccount() async {
+    if (_service.currentUser == null) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+      setState(() {});
+    } else {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('بلدنا فلسطين 🇵🇸'),
         actions: [
+          IconButton(
+            icon: Icon(_service.currentUser == null ? Icons.person_outline : Icons.person),
+            tooltip: 'حسابي',
+            onPressed: _openAccount,
+          ),
           IconButton(
             icon: const Icon(Icons.admin_panel_settings_outlined),
             tooltip: 'دخول الإدارة',
