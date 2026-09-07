@@ -16,6 +16,14 @@ class SupabaseService {
       return await action();
     } on AppException {
       rethrow;
+    } on AuthException catch (e) {
+      if (e.message.contains('Invalid login credentials')) {
+        throw AppException('البريد الإلكتروني أو كلمة السر غير صحيحة.');
+      }
+      if (e.message.contains('already registered')) {
+        throw AppException('هذا البريد مسجّل من قبل. جرّب تسجيل الدخول.');
+      }
+      throw AppException(e.message);
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('SocketException') || msg.contains('Failed host lookup')) {
@@ -70,7 +78,6 @@ class SupabaseService {
     });
   }
 
-  /// بحث عن الأنشطة بالاسم أو الوصف
   Future<List<Map<String, dynamic>>> searchListings(String query, {int limit = 30}) {
     return _run(() async {
       if (query.trim().isEmpty) return <Map<String, dynamic>>[];
@@ -104,12 +111,12 @@ class SupabaseService {
         'phone': phone,
         'whatsapp': whatsapp ?? phone,
         'address_text': addressText,
+        'owner_id': currentUser?.id,
         'status': 'pending',
       }).timeout(const Duration(seconds: 12));
     });
   }
 
-  /// صور النشاط
   Future<List<Map<String, dynamic>>> getListingImages(String listingId) {
     return _run(() async {
       final response = await _client
@@ -122,7 +129,6 @@ class SupabaseService {
     });
   }
 
-  /// ساعات عمل النشاط
   Future<List<Map<String, dynamic>>> getListingHours(String listingId) {
     return _run(() async {
       final response = await _client
@@ -135,16 +141,13 @@ class SupabaseService {
     });
   }
 
-  /// زيادة عداد المشاهدات (بدون انتظار أو إظهار أخطاء للمستخدم)
   Future<void> incrementViews(String listingId, int currentViews) async {
     try {
       await _client
           .from('listings')
           .update({'views_count': currentViews + 1})
           .eq('id', listingId);
-    } catch (_) {
-      // تجاهل أي خطأ هنا، هذا إجراء ثانوي غير حرج
-    }
+    } catch (_) {}
   }
 
   // ==== إدارة العناصر قيد المراجعة ====
@@ -170,6 +173,80 @@ class SupabaseService {
   Future<void> rejectListing(String id) {
     return _run(() async {
       await _client.from('listings').update({'status': 'rejected'}).eq('id', id);
+    });
+  }
+
+  // ==== المصادقة والحساب ====
+
+  User? get currentUser => _client.auth.currentUser;
+
+  Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
+
+  Future<void> signUp({required String email, required String password, String? fullName}) {
+    return _run(() async {
+      final res = await _client.auth.signUp(email: email, password: password);
+      if (res.user != null) {
+        await _client.from('profiles').upsert({
+          'id': res.user!.id,
+          'full_name': fullName,
+        });
+      }
+    });
+  }
+
+  Future<void> signIn({required String email, required String password}) {
+    return _run(() async {
+      await _client.auth.signInWithPassword(email: email, password: password);
+    });
+  }
+
+  Future<void> signOut() async {
+    await _client.auth.signOut();
+  }
+
+  // ==== المفضلة ====
+
+  Future<bool> isFavorite(String listingId) async {
+    final uid = currentUser?.id;
+    if (uid == null) return false;
+    try {
+      final res = await _client
+          .from('favorites')
+          .select()
+          .eq('user_id', uid)
+          .eq('listing_id', listingId)
+          .maybeSingle();
+      return res != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> toggleFavorite(String listingId, bool currentlyFavorite) {
+    return _run(() async {
+      final uid = currentUser?.id;
+      if (uid == null) throw AppException('سجّل دخولك أولاً لإضافة المفضلة');
+      if (currentlyFavorite) {
+        await _client.from('favorites').delete().eq('user_id', uid).eq('listing_id', listingId);
+      } else {
+        await _client.from('favorites').insert({'user_id': uid, 'listing_id': listingId});
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getFavoriteListings() {
+    return _run(() async {
+      final uid = currentUser?.id;
+      if (uid == null) return <Map<String, dynamic>>[];
+      final response = await _client
+          .from('favorites')
+          .select('listing_id, listings(*)')
+          .eq('user_id', uid)
+          .timeout(const Duration(seconds: 12));
+      return List<Map<String, dynamic>>.from(response)
+          .where((r) => r['listings'] != null)
+          .map((r) => Map<String, dynamic>.from(r['listings']))
+          .toList();
     });
   }
 }
