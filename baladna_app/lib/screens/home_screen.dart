@@ -7,8 +7,9 @@ import 'admin_screen.dart';
 import 'search_screen.dart';
 import 'auth_screen.dart';
 import 'account_screen.dart';
+import 'governorates_screen.dart';
+import 'notifications_screen.dart';
 
-// غيّر هذا الرمز لأي رقم سري تحبه، هو مفتاح الدخول للوحة الإدارة
 const String _adminPin = '5522';
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _service = SupabaseService();
+  final _searchCtrl = TextEditingController();
 
   List<Map<String, dynamic>> _regions = [];
   List<Map<String, dynamic>> _categories = [];
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _selectedRegion;
   bool _loading = true;
   String? _error;
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -43,10 +46,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final regions = await _service.getGovernorates();
       final categories = await _service.getCategories();
       final nearby = await _service.getListings(limit: 10);
+      final unread = await _service.getUnreadNotificationsCount();
       setState(() {
         _regions = regions;
         _categories = categories;
         _nearby = nearby;
+        _unreadCount = unread;
         _loading = false;
       });
     } catch (e) {
@@ -63,10 +68,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final nearby = await _service.getListings(regionId: region?['id'], limit: 10);
       setState(() => _nearby = nearby);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
+  }
+
+  void _goSearch() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen()));
   }
 
   void _openAdminLogin() {
@@ -75,43 +82,32 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('دخول الإدارة'),
-              content: TextField(
-                controller: pinController,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'أدخل الرمز السري',
-                  errorText: errorText,
-                ),
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('دخول الإدارة'),
+            content: TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: InputDecoration(hintText: 'أدخل الرمز السري', errorText: errorText),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+              ElevatedButton(
+                onPressed: () {
+                  if (pinController.text == _adminPin) {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+                  } else {
+                    setDialogState(() => errorText = 'رمز غير صحيح');
+                  }
+                },
+                child: const Text('دخول'),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (pinController.text == _adminPin) {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AdminScreen()),
-                      );
-                    } else {
-                      setDialogState(() => errorText = 'رمز غير صحيح');
-                    }
-                  },
-                  child: const Text('دخول'),
-                ),
-              ],
-            );
-          },
-        );
+            ],
+          );
+        });
       },
     );
   }
@@ -119,19 +115,49 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openAccount() async {
     if (_service.currentUser == null) {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
-      setState(() {});
     } else {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen()));
-      setState(() {});
     }
+    setState(() {});
+    _loadInitial();
+  }
+
+  Future<void> _openNotifications() async {
+    if (_service.currentUser == null) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+    } else {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    }
+    _loadInitial();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.sandLight,
       appBar: AppBar(
         title: const Text('بلدنا فلسطين 🇵🇸'),
         actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'الإشعارات',
+                onPressed: _openNotifications,
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(color: AppColors.clay, shape: BoxShape.circle),
+                    child: Text('$_unreadCount', style: const TextStyle(fontSize: 9, color: Colors.white)),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: Icon(_service.currentUser == null ? Icons.person_outline : Icons.person),
             tooltip: 'حسابي',
@@ -149,10 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: const Icon(Icons.add),
         label: const Text('أضف نشاطك'),
         onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AddListingScreen()),
-          );
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddListingScreen()));
+          _loadInitial();
         },
       ),
       body: _loading
@@ -181,120 +205,187 @@ class _HomeScreenState extends State<HomeScreen> {
               : RefreshIndicator(
                   onRefresh: _loadInitial,
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.zero,
                     children: [
-                      InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SearchScreen()),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.sand),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.search, color: Colors.grey),
-                              SizedBox(width: 8),
-                              Text('ابحث عن محل، خدمة، إعلان...', style: TextStyle(color: Colors.grey)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
+                      // ===== البانر الترحيبي =====
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.sand),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<Map<String, dynamic>?>(
-                            isExpanded: true,
-                            hint: const Text('📍 كل المحافظات'),
-                            value: _selectedRegion,
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('📍 كل المحافظات')),
-                              ..._regions.map((r) => DropdownMenuItem(
-                                    value: r,
-                                    child: Text('📍 ${r['name_ar']}'),
-                                  )),
-                            ],
-                            onChanged: _onRegionSelected,
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 28, 20, 30),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [AppColors.oliveDeep, AppColors.olive],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      const Text('الأقسام',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
-                      const SizedBox(height: 12),
-                      GridView.count(
-                        crossAxisCount: 4,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 14,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 0.85,
-                        children: _categories.map((cat) {
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => CategoryScreen(
-                                    categoryId: cat['id'],
-                                    categoryName: cat['name_ar'],
-                                    regionId: _selectedRegion?['id'],
-                                  ),
+                        child: Column(
+                          children: [
+                            const Text('🇵🇸 كل فلسطين في مكان واحد',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            const Text('محلات، عقارات، سيارات، وظائف، خدمات وإعلانات',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white70, fontSize: 13)),
+                            const SizedBox(height: 18),
+                            Container(
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                              child: TextField(
+                                controller: _searchCtrl,
+                                textInputAction: TextInputAction.search,
+                                onSubmitted: (_) => _goSearch(),
+                                decoration: const InputDecoration(
+                                  hintText: 'ماذا تبحث في فلسطين؟',
+                                  prefixIcon: Icon(Icons.search),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(vertical: 14),
                                 ),
-                              );
-                            },
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 56,
-                                  height: 56,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.sand,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(cat['icon'] ?? '', style: const TextStyle(fontSize: 24)),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  cat['name_ar'],
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 11),
-                                  maxLines: 2,
-                                ),
-                              ],
+                              ),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 24),
-
-                      Text(
-                        _selectedRegion == null ? 'أحدث الإضافات' : 'أحدث الإضافات في ${_selectedRegion!['name_ar']}',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.oliveDeep),
-                      ),
-                      const SizedBox(height: 10),
-                      if (_nearby.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text('لا يوجد عناصر بعد بهذه المنطقة', style: TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _goSearch,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.ink,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Text('بحث', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
                         ),
-                      ..._nearby.map((item) => _ListingCard(item: item)),
+                      ),
+
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // ===== اختيار المحافظة =====
+                            InkWell(
+                              onTap: () async {
+                                final selected = await Navigator.push<Map<String, dynamic>>(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const GovernoratesScreen()),
+                                );
+                                if (selected != null) _onRegionSelected(selected);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.sand),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined, color: AppColors.clay),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _selectedRegion == null ? 'كل المحافظات' : _selectedRegion!['name_ar'],
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    if (_selectedRegion != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.close, size: 18),
+                                        onPressed: () => _onRegionSelected(null),
+                                      ),
+                                    const Icon(Icons.chevron_left, color: Colors.grey),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 26),
+
+                            // ===== استكشف الأقسام =====
+                            const Text('استكشف الأقسام',
+                                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                            const SizedBox(height: 14),
+                            ..._categories.map((cat) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(16),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => CategoryScreen(
+                                            categoryId: cat['id'],
+                                            categoryName: cat['name_ar'],
+                                            regionId: _selectedRegion?['id'],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 52,
+                                            height: 52,
+                                            decoration: BoxDecoration(color: AppColors.sand, borderRadius: BorderRadius.circular(14)),
+                                            alignment: Alignment.center,
+                                            child: Text(cat['icon'] ?? '', style: const TextStyle(fontSize: 24)),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(cat['name_ar'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                                if (cat['description'] != null) ...[
+                                                  const SizedBox(height: 3),
+                                                  Text(cat['description'], style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                          const Icon(Icons.chevron_left, color: Colors.grey),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                )),
+
+                            const SizedBox(height: 14),
+                            Text(
+                              _selectedRegion == null ? 'أحدث الإضافات' : 'أحدث الإضافات في ${_selectedRegion!['name_ar']}',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.oliveDeep),
+                            ),
+                            const SizedBox(height: 10),
+                            if (_nearby.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20),
+                                child: Text('لا يوجد عناصر بعد بهذه المنطقة', style: TextStyle(color: Colors.grey)),
+                              ),
+                            ..._nearby.map((item) => _ListingCard(item: item)),
+
+                            const SizedBox(height: 30),
+                            const Divider(),
+                            const SizedBox(height: 14),
+                            const Text('عن بلدنا فلسطين',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.oliveDeep)),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'منصة فلسطينية شاملة تهدف لجمع المحلات والعقارات والسيارات والوظائف والخدمات والإعلانات في مكان واحد، لتسهيل الوصول للخدمات والفرص داخل جميع محافظات فلسطين.',
+                              style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.7),
+                            ),
+                            const SizedBox(height: 60),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -334,12 +425,7 @@ class _ListingCard extends StatelessWidget {
                 Text(item['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(height: 3),
                 if (item['description'] != null)
-                  Text(
-                    item['description'],
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
+                  Text(item['description'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ),

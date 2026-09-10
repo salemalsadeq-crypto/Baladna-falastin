@@ -12,6 +12,7 @@ class AdminScreen extends StatefulWidget {
 class _AdminScreenState extends State<AdminScreen> {
   final _service = SupabaseService();
   List<Map<String, dynamic>> _pending = [];
+  Map<String, dynamic>? _stats;
   bool _loading = true;
 
   @override
@@ -23,8 +24,10 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final items = await _service.getPendingListings();
+    final stats = await _service.getAdminStats();
     setState(() {
       _pending = items;
+      _stats = stats;
       _loading = false;
     });
   }
@@ -39,6 +42,23 @@ class _AdminScreenState extends State<AdminScreen> {
     _load();
   }
 
+  Widget _statBox(String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          children: [
+            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,18 +67,36 @@ class _AdminScreenState extends State<AdminScreen> {
         onRefresh: _load,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _pending.isEmpty
-                ? ListView(
-                    children: const [
-                      SizedBox(height: 100),
-                      Center(child: Text('لا يوجد عناصر قيد المراجعة حاليا')),
-                    ],
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _pending.length,
-                    itemBuilder: (context, index) {
-                      final item = _pending[index];
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_stats != null) ...[
+                    Row(
+                      children: [
+                        _statBox('المستخدمين', '${_stats!['totalUsers']}', AppColors.oliveDeep),
+                        _statBox('الأنشطة', '${_stats!['totalListings']}', AppColors.oliveDeep),
+                        _statBox('المشاهدات', '${_stats!['totalViews']}', AppColors.oliveDeep),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _statBox('قيد المراجعة', '${_stats!['pending']}', AppColors.gold),
+                        _statBox('معتمد', '${_stats!['approved']}', AppColors.ok),
+                        _statBox('مرفوض', '${_stats!['rejected']}', AppColors.clay),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  const Text('بانتظار المراجعة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 10),
+                  if (_pending.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 30),
+                      child: Center(child: Text('لا يوجد عناصر قيد المراجعة حاليا')),
+                    )
+                  else
+                    ..._pending.map((item) {
                       final cat = item['categories'];
                       final reg = item['regions'];
                       return Container(
@@ -92,10 +130,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     onPressed: () => _approve(item['id']),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.ok,
-                                      foregroundColor: Colors.white,
-                                    ),
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.ok, foregroundColor: Colors.white),
                                     icon: const Icon(Icons.check, size: 18),
                                     label: const Text('موافقة'),
                                   ),
@@ -104,10 +139,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     onPressed: () => _reject(item['id']),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.clay,
-                                      foregroundColor: Colors.white,
-                                    ),
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.clay, foregroundColor: Colors.white),
                                     icon: const Icon(Icons.close, size: 18),
                                     label: const Text('رفض'),
                                   ),
@@ -117,8 +149,9 @@ class _AdminScreenState extends State<AdminScreen> {
                           ],
                         ),
                       );
-                    },
-                  ),
+                    }),
+                ],
+              ),
       ),
     );
   }
