@@ -192,13 +192,54 @@ class SupabaseService {
 
   Future<void> approveListing(String id) {
     return _run(() async {
+      final listing = await _client.from('listings').select('owner_id, title').eq('id', id).maybeSingle();
       await _client.from('listings').update({'status': 'approved'}).eq('id', id);
+      if (listing != null && listing['owner_id'] != null) {
+        await _addNotification(
+          listing['owner_id'],
+          'تمت الموافقة على نشاطك ✅',
+          'نشاطك "${listing['title']}" صار ظاهر للجميع الآن.',
+        );
+      }
     });
   }
 
   Future<void> rejectListing(String id) {
     return _run(() async {
+      final listing = await _client.from('listings').select('owner_id, title').eq('id', id).maybeSingle();
       await _client.from('listings').update({'status': 'rejected'}).eq('id', id);
+      if (listing != null && listing['owner_id'] != null) {
+        await _addNotification(
+          listing['owner_id'],
+          'تم رفض نشاطك',
+          'نشاطك "${listing['title']}" لم يجتز المراجعة. تواصل معنا لمزيد من التفاصيل.',
+        );
+      }
+    });
+  }
+
+  // ==== إحصائيات المدير ====
+
+  Future<Map<String, dynamic>> getAdminStats() {
+    return _run(() async {
+      final listings = await _client.from('listings').select('status, views_count');
+      final users = await _client.from('profiles').select('id');
+      int approved = 0, pending = 0, rejected = 0, totalViews = 0;
+      for (final l in listings) {
+        final s = l['status'];
+        if (s == 'approved') approved++;
+        if (s == 'pending') pending++;
+        if (s == 'rejected') rejected++;
+        totalViews += (l['views_count'] as int? ?? 0);
+      }
+      return {
+        'approved': approved,
+        'pending': pending,
+        'rejected': rejected,
+        'totalViews': totalViews,
+        'totalUsers': (users as List).length,
+        'totalListings': (listings as List).length,
+      };
     });
   }
 
@@ -213,6 +254,11 @@ class SupabaseService {
       final res = await _client.auth.signUp(email: email, password: password);
       if (res.user != null) {
         await _client.from('profiles').upsert({'id': res.user!.id, 'full_name': fullName});
+        await _addNotification(
+          res.user!.id,
+          'أهلاً فيك بتطبيق بلدنا فلسطين 🇵🇸',
+          'مبسوطين انك انضممت الينا. استكشف الأقسام وأضف نشاطك الأول!',
+        );
       }
     });
   }
@@ -301,5 +347,44 @@ class SupabaseService {
         onConflict: 'listing_id,user_id',
       );
     });
+  }
+
+  // ==== الإشعارات ====
+
+  Future<int> getUnreadNotificationsCount() async {
+    final uid = currentUser?.id;
+    if (uid == null) return 0;
+    try {
+      final res = await _client.from('notifications').select('id').eq('user_id', uid).eq('is_read', false);
+      return (res as List).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getNotifications() {
+    return _run(() async {
+      final uid = currentUser?.id;
+      if (uid == null) return <Map<String, dynamic>>[];
+      final response = await _client
+          .from('notifications')
+          .select()
+          .eq('user_id', uid)
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 12));
+      return List<Map<String, dynamic>>.from(response);
+    });
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    try {
+      await _client.from('notifications').update({'is_read': true}).eq('id', id);
+    } catch (_) {}
+  }
+
+  Future<void> _addNotification(String userId, String title, String body) async {
+    try {
+      await _client.from('notifications').insert({'user_id': userId, 'title': title, 'body': body});
+    } catch (_) {}
   }
 }
